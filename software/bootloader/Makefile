@@ -1,5 +1,5 @@
 # and don't touch the rest unless you know what you're doing.
-CROSS_COMPILE ?= lm32-elf-
+CROSS_COMPILE ?= /opt/gcc-riscv/bin/riscv64-unknown-elf-
 
 CC =		$(CROSS_COMPILE)gcc
 LD =		$(CROSS_COMPILE)ld
@@ -7,19 +7,28 @@ OBJDUMP =	$(CROSS_COMPILE)objdump
 OBJCOPY =	$(CROSS_COMPILE)objcopy
 SIZE =		$(CROSS_COMPILE)size
 
-CFLAGS = -Os -I../common -I.  -mmultiply-enabled -mbarrel-shift-enabled -ffunction-sections -fdata-sections
-OBJS = boot-crt0.o ../common/uart.o boot.o
+# keep RV32I: the bootloader also emulates DIV/MULH instuctions
+
+CFLAGS = -g -Os -m32 -msoft-float -march=RV32I -I. -I../common -ffunction-sections -fdata-sections -I../arch -Wall
+LDFLAGS = -Wl,--gc-sections 
+OBJS = crtboot.o ../common/uart.o ../arch/risc-v/emulate.o ../arch/risc-v/irq.o ../common/flash.o main.o
 LDS = boot.ld
-LDFLAGS =  -mmultiply-enabled -mbarrel-shift-enabled -Wl,--gc-sections
-OUTPUT=boot
+OUTPUT= boot
+
+#CFLAGS += -DSIMULATION
 
 $(OUTPUT): $(LDS) $(OBJS)
-	gcc -o ../common/genraminit ../common/genraminit.c
-	${CC} -o $(OUTPUT).elf -nostartfiles $(OBJS) -T $(LDS) -lgcc -lc
+	${CC} -g  -m32 -Wl,--gc-sections -march=RV32I -o $(OUTPUT).elf $(LDFLAGS) -nostartfiles $(OBJS)  -lm -T $(LDS)
 	${OBJCOPY} -O binary $(OUTPUT).elf $(OUTPUT).bin
-#	${OBJDUMP} -D $(OUTPUT).elf  > disasm.S
+	${OBJDUMP} -D $(OUTPUT).elf > disasm.S
 	$(SIZE) $(OUTPUT).elf
-	../common/genraminit $(OUTPUT).bin 512 > boot.ram
+	../tools/genraminit $(OUTPUT).bin 1300 0 0 > $(OUTPUT).ram
+	../tools/genmeminit $(OUTPUT).bin 1300 0 0 > $(OUTPUT).mem
+	${OBJDUMP} -t $(OUTPUT).elf | sort > syms
 
 clean:
-	rm -f $(OBJS) $(OUTPUT).bin
+	rm -f $(OUTPUT).elf $(OUTPUT).bin $(OBJS)
+	
+
+%.o:	%.S
+	${CC} -c -m32 $^ -o $@

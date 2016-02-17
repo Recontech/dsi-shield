@@ -22,20 +22,26 @@
 #ifndef __BOARD_H
 #define __BOARD_H
 
+#ifndef __ASSEMBLY__
 #include <stdint.h>
+#include <risc-v/encoding.h>
+#endif
 
 #define BASE_CLOCK 25000000 // Xtal frequency
 
-#define BASE_UART 0x10000
-#define BASE_DSI 0x20000
-#define BASE_FBCTL 0x40000
+#define BASE_IOREGS 	 0xc0000000
+#define BASE_SDRAM	 0x80000000
 
-#define BASE_SDRAM 0x40000000
+#define BASE_UART  (BASE_IOREGS+0x10000)
+#define BASE_DSI   (BASE_IOREGS+0x20000)
+#define BASE_FBCTL (BASE_IOREGS+0x40000)
+
+#define SYS_PLL_FREQ 0xc004002c
 
 #define UART_BAUDRATE 115200
 
-#define FB_PLL_STATUS 0x40014
 
+#ifndef __ASSEMBLY__
 static inline void writel ( uint32_t reg, uint32_t val)
 {
 	*(volatile uint32_t *)(reg) = val;
@@ -48,16 +54,23 @@ static inline uint32_t readl ( uint32_t reg )
 
 static inline unsigned int board_system_freq()
 {
-    unsigned int pll_mul = readl (FB_PLL_STATUS) & 0x3f;
-    unsigned int pll_div = (readl (FB_PLL_STATUS) >> 6) & 0x3f;
-    return (unsigned int)BASE_CLOCK * pll_mul / pll_div;
+    return readl(SYS_PLL_FREQ);
 }
 
-static inline unsigned int board_phy_freq()
+static inline void delay_ms(int ms)
 {
-    unsigned int pll_mul = readl (FB_PLL_STATUS) & 0x3f;
-    unsigned int pll_div = (readl (FB_PLL_STATUS) >> 12) & 0x3f;
-    return (unsigned int)BASE_CLOCK * pll_mul / pll_div;
+    uint32_t t_end = rv_rdtime() + ms;
+
+    while(rv_rdtime() < t_end) asm volatile( "nop");
 }
+
+static inline uint32_t get_ms_ticks()
+{
+    return rv_rdtime();
+}
+
+void delay(int tics);
+
+#endif
 
 #endif
